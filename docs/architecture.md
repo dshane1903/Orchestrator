@@ -9,6 +9,7 @@ Forgeflow is a durable execution engine built around explicit state transitions 
 - Worker: executes leased tasks, renews leases, emits heartbeats, and reports completion or failure.
 - State store: persists workflows, jobs, attempts, leases, idempotency keys, and worker heartbeats.
 - Observability: exposes metrics for queue depth, job latency, retry counts, lease expiry, and worker liveness.
+- Lease recovery loop: periodically requeues expired `RUNNING` jobs and fences stale workers.
 
 ## First State Model
 

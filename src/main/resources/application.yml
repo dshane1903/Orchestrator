@@ -2,6 +2,12 @@ forgeflow:
   application:
     name: forgeflow
     version: 0.1.0-SNAPSHOT
+  scheduler:
+    lease-recovery:
+      enabled: true
+      initial-delay-ms: 5000
+      fixed-delay-ms: 5000
+      batch-size: 100
 
 spring:
   datasource:

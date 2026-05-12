@@ -51,6 +51,7 @@ class JobControllerTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("forgeflow.scheduler.lease-recovery.enabled", () -> false);
     }
 
     @BeforeEach
@@ -136,4 +137,3 @@ class JobControllerTest {
             .andExpect(status().isCreated());
     }
 }
-

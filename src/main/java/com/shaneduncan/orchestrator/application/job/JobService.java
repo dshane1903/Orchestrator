@@ -7,6 +7,7 @@ import com.shaneduncan.orchestrator.persistence.job.JdbcJobRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 
@@ -42,6 +43,10 @@ public class JobService {
             now,
             now.plus(leaseDuration)
         );
+    }
+
+    public List<Job> recoverExpiredLeases(int batchSize) {
+        return jobRepository.recoverExpiredLeases(Instant.now(clock), batchSize);
     }
 }
 
