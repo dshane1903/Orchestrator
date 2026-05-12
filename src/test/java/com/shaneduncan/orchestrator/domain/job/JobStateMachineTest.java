@@ -22,6 +22,12 @@ class JobStateMachineTest {
     }
 
     @Test
+    void renewsRunningLeaseWithoutChangingState() {
+        assertThat(JobStateMachine.transition(JobStatus.RUNNING, JobEvent.RENEW_LEASE))
+            .isEqualTo(JobStatus.RUNNING);
+    }
+
+    @Test
     void sendsRetryableFailureBackToRetrying() {
         assertThat(JobStateMachine.transition(JobStatus.RUNNING, JobEvent.FAIL_RETRYABLE))
             .isEqualTo(JobStatus.RETRYING);
@@ -60,4 +66,3 @@ class JobStateMachineTest {
         assertThat(JobStateMachine.canTransition(JobStatus.SUCCEEDED, JobEvent.CLAIM)).isFalse();
     }
 }
-

@@ -118,6 +118,36 @@ public final class Job {
         );
     }
 
+    public Job renewLease(
+        WorkerId workerId,
+        long observedAssignmentVersion,
+        Instant leaseExpiresAt,
+        Instant now
+    ) {
+        requireCurrentAssignment(workerId, observedAssignmentVersion);
+        Objects.requireNonNull(leaseExpiresAt, "leaseExpiresAt is required");
+        Objects.requireNonNull(now, "now is required");
+        if (!leaseExpiresAt.isAfter(now)) {
+            throw new IllegalArgumentException("leaseExpiresAt must be in the future");
+        }
+
+        return copy(
+            JobStateMachine.transition(status, JobEvent.RENEW_LEASE),
+            attemptCount,
+            assignmentVersion,
+            workerId,
+            leaseExpiresAt,
+            null,
+            failureReason,
+            now
+        );
+    }
+
+    public Job complete(WorkerId workerId, long observedAssignmentVersion, Instant now) {
+        requireCurrentAssignment(workerId, observedAssignmentVersion);
+        return complete(observedAssignmentVersion, now);
+    }
+
     public Job complete(long observedAssignmentVersion, Instant now) {
         requireFreshAssignment(observedAssignmentVersion);
         return copy(
@@ -130,6 +160,17 @@ public final class Job {
             null,
             now
         );
+    }
+
+    public Job failForRetry(
+        WorkerId workerId,
+        long observedAssignmentVersion,
+        String reason,
+        Instant nextRunAt,
+        Instant now
+    ) {
+        requireCurrentAssignment(workerId, observedAssignmentVersion);
+        return failForRetry(observedAssignmentVersion, reason, nextRunAt, now);
     }
 
     public Job failForRetry(long observedAssignmentVersion, String reason, Instant nextRunAt, Instant now) {
@@ -146,6 +187,11 @@ public final class Job {
             requireText(reason, "reason is required"),
             now
         );
+    }
+
+    public Job failPermanently(WorkerId workerId, long observedAssignmentVersion, String reason, Instant now) {
+        requireCurrentAssignment(workerId, observedAssignmentVersion);
+        return failPermanently(observedAssignmentVersion, reason, now);
     }
 
     public Job failPermanently(long observedAssignmentVersion, String reason, Instant now) {
@@ -253,6 +299,15 @@ public final class Job {
     private void requireFreshAssignment(long observedAssignmentVersion) {
         if (observedAssignmentVersion != assignmentVersion) {
             throw new StaleJobAssignmentException(id, observedAssignmentVersion, assignmentVersion);
+        }
+    }
+
+    private void requireCurrentAssignment(WorkerId workerId, long observedAssignmentVersion) {
+        Objects.requireNonNull(workerId, "workerId is required");
+        requireFreshAssignment(observedAssignmentVersion);
+        if (!workerId.equals(leasedBy)) {
+            WorkerId currentWorkerId = leasedBy == null ? new WorkerId("<unassigned>") : leasedBy;
+            throw new JobAssignmentOwnershipException(id, workerId, currentWorkerId);
         }
     }
 

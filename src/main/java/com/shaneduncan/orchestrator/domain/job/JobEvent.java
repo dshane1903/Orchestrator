@@ -2,6 +2,7 @@ package com.shaneduncan.orchestrator.domain.job;
 
 public enum JobEvent {
     CLAIM,
+    RENEW_LEASE,
     COMPLETE,
     FAIL_RETRYABLE,
     FAIL_PERMANENT,
@@ -9,4 +10,3 @@ public enum JobEvent {
     LEASE_EXPIRED,
     CANCEL
 }
-

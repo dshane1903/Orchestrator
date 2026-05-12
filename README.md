@@ -55,3 +55,27 @@ curl -X POST http://localhost:8080/api/jobs/claim \
   -H 'Content-Type: application/json' \
   -d '{"workerId":"worker-1","leaseSeconds":30}'
 ```
+
+Long-poll for work from the worker API:
+
+```bash
+curl -X POST http://localhost:8080/api/workers/worker-1/poll \
+  -H 'Content-Type: application/json' \
+  -d '{"leaseSeconds":30,"waitSeconds":10}'
+```
+
+Renew the lease before it expires:
+
+```bash
+curl -X POST http://localhost:8080/api/workers/worker-1/jobs/<job-id>/renew-lease \
+  -H 'Content-Type: application/json' \
+  -d '{"assignmentVersion":1,"leaseSeconds":30}'
+```
+
+Complete a job with its fencing token:
+
+```bash
+curl -X POST http://localhost:8080/api/workers/worker-1/jobs/<job-id>/complete \
+  -H 'Content-Type: application/json' \
+  -d '{"assignmentVersion":1}'
+```

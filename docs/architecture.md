@@ -6,7 +6,7 @@ Forgeflow is a durable execution engine built around explicit state transitions 
 
 - API server: accepts workflow and job submissions, cancellations, and status queries.
 - Scheduler: finds runnable work and assigns leases to eligible workers.
-- Worker: executes leased tasks, renews leases, emits heartbeats, and reports completion or failure.
+- Worker: long-polls for leased tasks, renews leases, emits heartbeats, and reports completion or failure.
 - State store: persists workflows, jobs, attempts, leases, idempotency keys, and worker heartbeats.
 - Observability: exposes metrics for queue depth, job latency, retry counts, lease expiry, and worker liveness.
 - Lease recovery loop: periodically requeues expired `RUNNING` jobs and fences stale workers.
@@ -22,6 +22,7 @@ stateDiagram-v2
     [*] --> PENDING
     PENDING --> RUNNING: CLAIM
     PENDING --> CANCELLED: CANCEL
+    RUNNING --> RUNNING: RENEW_LEASE
     RUNNING --> SUCCEEDED: COMPLETE
     RUNNING --> RETRYING: FAIL_RETRYABLE
     RUNNING --> FAILED: FAIL_PERMANENT
@@ -36,9 +37,11 @@ stateDiagram-v2
 ## Reliability Rules
 
 - A worker owns a job only until `lease_expires_at`.
+- Workers heartbeat into the state store so liveness is observable independently of job state.
 - Runnable jobs are claimed with a single database update using row locks, so competing schedulers cannot assign the same job.
+- Lease renewal keeps long-running work alive without changing the assignment version.
 - Expired leases are recovered in bounded batches and increment assignment versions before requeueing work.
-- Completion reports must include the assignment version that granted the lease.
+- Completion, failure, and renewal reports must include the assignment version that granted the lease.
 - Stale workers cannot complete work after a newer assignment version exists.
 - Claiming a job increments its assignment version, which acts as the first fencing token.
 - Client idempotency keys map duplicate submissions to the original job.
