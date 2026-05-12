@@ -25,6 +25,24 @@ class JobTest {
     }
 
     @Test
+    void createsBlockedJobForDependentWorkflowNode() {
+        Job job = Job.createBlocked(JOB_ID, "embedding-generation", 3, NOW);
+
+        assertThat(job.status()).isEqualTo(JobStatus.BLOCKED);
+        assertThat(job.nextRunAt()).contains(NOW);
+    }
+
+    @Test
+    void blockedJobBecomesPendingWhenDependenciesAreReady() {
+        Job blocked = Job.createBlocked(JOB_ID, "embedding-generation", 3, NOW);
+
+        Job pending = blocked.markDependenciesReady(NOW.plusSeconds(10));
+
+        assertThat(pending.status()).isEqualTo(JobStatus.PENDING);
+        assertThat(pending.nextRunAt()).contains(NOW.plusSeconds(10));
+    }
+
+    @Test
     void claimAssignsLeaseAndFencingVersion() {
         Job claimed = Job.create(JOB_ID, "embedding-generation", 3, NOW)
             .claim(WORKER_ONE, NOW.plusSeconds(30), NOW);

@@ -13,13 +13,16 @@ Forgeflow is a durable execution engine built around explicit state transitions 
 
 ## First State Model
 
-Jobs begin in `PENDING`, move to `RUNNING` when leased by a worker, and finish as `SUCCEEDED`, `FAILED`, `CANCELLED`, or `DEAD_LETTERED`.
+Jobs created from a workflow DAG can begin in `BLOCKED` until all upstream jobs succeed. Runnable jobs begin in `PENDING`, move to `RUNNING` when leased by a worker, and finish as `SUCCEEDED`, `FAILED`, `CANCELLED`, or `DEAD_LETTERED`.
 
 Retries are represented explicitly: a failed attempt can schedule the job back to `RETRYING` with a future `next_run_at`. When that time arrives, the scheduler can move it back to `PENDING`.
 
 ```mermaid
 stateDiagram-v2
+    [*] --> BLOCKED
     [*] --> PENDING
+    BLOCKED --> PENDING: DEPENDENCIES_READY
+    BLOCKED --> CANCELLED: CANCEL
     PENDING --> RUNNING: CLAIM
     PENDING --> CANCELLED: CANCEL
     RUNNING --> RUNNING: RENEW_LEASE
@@ -39,6 +42,8 @@ stateDiagram-v2
 - A worker owns a job only until `lease_expires_at`.
 - Workers heartbeat into the state store so liveness is observable independently of job state.
 - Runnable jobs are claimed with a single database update using row locks, so competing schedulers cannot assign the same job.
+- Workflow DAG children are stored as `BLOCKED` jobs and only promoted to `PENDING` after every upstream dependency is `SUCCEEDED`.
+- Workflow submissions reject duplicate node keys, missing dependencies, and cycles before writing jobs.
 - Lease renewal keeps long-running work alive without changing the assignment version.
 - Expired leases are recovered in bounded batches and increment assignment versions before requeueing work.
 - Completion, failure, and renewal reports must include the assignment version that granted the lease.

@@ -16,6 +16,12 @@ class JobStateMachineTest {
     }
 
     @Test
+    void releasesBlockedJobWhenDependenciesAreReady() {
+        assertThat(JobStateMachine.transition(JobStatus.BLOCKED, JobEvent.DEPENDENCIES_READY))
+            .isEqualTo(JobStatus.PENDING);
+    }
+
+    @Test
     void completesRunningJob() {
         assertThat(JobStateMachine.transition(JobStatus.RUNNING, JobEvent.COMPLETE))
             .isEqualTo(JobStatus.SUCCEEDED);
@@ -46,7 +52,7 @@ class JobStateMachineTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = JobStatus.class, names = {"PENDING", "RUNNING", "RETRYING"})
+    @EnumSource(value = JobStatus.class, names = {"BLOCKED", "PENDING", "RUNNING", "RETRYING"})
     void allowsCancellationBeforeTerminalState(JobStatus status) {
         assertThat(JobStateMachine.transition(status, JobEvent.CANCEL))
             .isEqualTo(JobStatus.CANCELLED);

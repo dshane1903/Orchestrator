@@ -5,6 +5,7 @@ import com.shaneduncan.orchestrator.domain.job.JobId;
 import com.shaneduncan.orchestrator.domain.job.StaleJobAssignmentException;
 import com.shaneduncan.orchestrator.domain.job.WorkerId;
 import com.shaneduncan.orchestrator.persistence.job.JdbcJobRepository;
+import com.shaneduncan.orchestrator.persistence.workflow.JdbcWorkflowRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -12,15 +13,22 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class JobService {
 
     private final JdbcJobRepository jobRepository;
+    private final JdbcWorkflowRepository workflowRepository;
     private final Clock clock;
 
-    public JobService(JdbcJobRepository jobRepository, Clock clock) {
+    public JobService(
+        JdbcJobRepository jobRepository,
+        JdbcWorkflowRepository workflowRepository,
+        Clock clock
+    ) {
         this.jobRepository = jobRepository;
+        this.workflowRepository = workflowRepository;
         this.clock = clock;
     }
 
@@ -58,13 +66,18 @@ public class JobService {
         return persistFenced(renewed, assignmentVersion);
     }
 
+    @Transactional
     public Job completeJob(JobId id, String workerId, long assignmentVersion) {
         Instant now = Instant.now(clock);
         Job current = findExisting(id);
         Job completed = current.complete(new WorkerId(workerId), assignmentVersion, now);
-        return persistFenced(completed, assignmentVersion);
+        Job persisted = persistFenced(completed, assignmentVersion);
+        workflowRepository.promoteReadyDependents(id, now);
+        workflowRepository.markWorkflowSucceededIfComplete(id, now);
+        return persisted;
     }
 
+    @Transactional
     public Job failJob(
         JobId id,
         String workerId,
@@ -83,7 +96,11 @@ public class JobService {
         Job failed = retryable && current.attemptCount() < current.maxAttempts()
             ? current.failForRetry(currentWorker, assignmentVersion, reason, now.plus(retryDelay), now)
             : current.failPermanently(currentWorker, assignmentVersion, reason, now);
-        return persistFenced(failed, assignmentVersion);
+        Job persisted = persistFenced(failed, assignmentVersion);
+        if (persisted.status().isTerminal()) {
+            workflowRepository.markWorkflowFailedForJob(id, now);
+        }
+        return persisted;
     }
 
     public List<Job> recoverExpiredLeases(int batchSize) {

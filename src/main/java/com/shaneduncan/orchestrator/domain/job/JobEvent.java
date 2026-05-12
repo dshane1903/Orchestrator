@@ -1,6 +1,7 @@
 package com.shaneduncan.orchestrator.domain.job;
 
 public enum JobEvent {
+    DEPENDENCIES_READY,
     CLAIM,
     RENEW_LEASE,
     COMPLETE,

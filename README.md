@@ -48,6 +48,20 @@ curl -X POST http://localhost:8080/api/jobs \
   -d '{"taskType":"embedding-generation","maxAttempts":3}'
 ```
 
+Submit a workflow DAG:
+
+```bash
+curl -X POST http://localhost:8080/api/workflows \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name":"document-indexing",
+    "nodes":[
+      {"key":"ingest","taskType":"document-ingestion","maxAttempts":3,"dependsOn":[]},
+      {"key":"embed","taskType":"embedding-generation","maxAttempts":3,"dependsOn":["ingest"]}
+    ]
+  }'
+```
+
 Claim the next runnable job for a worker:
 
 ```bash

@@ -4,6 +4,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shaneduncan.orchestrator.persistence.job.JdbcJobRepository;
+import com.shaneduncan.orchestrator.persistence.workflow.JdbcWorkflowRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -21,10 +22,14 @@ class JobServiceTest {
     @Mock
     private JdbcJobRepository jobRepository;
 
+    @Mock
+    private JdbcWorkflowRepository workflowRepository;
+
     @Test
     void recoversExpiredLeasesUsingCurrentClockTime() {
         JobService jobService = new JobService(
             jobRepository,
+            workflowRepository,
             Clock.fixed(NOW, ZoneOffset.UTC)
         );
         when(jobRepository.recoverExpiredLeases(NOW, 25)).thenReturn(List.of());
@@ -34,4 +39,3 @@ class JobServiceTest {
         verify(jobRepository).recoverExpiredLeases(NOW, 25);
     }
 }
-

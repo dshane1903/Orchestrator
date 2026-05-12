@@ -52,10 +52,28 @@ public final class Job {
             throw new IllegalArgumentException("maxAttempts must be at least 1");
         }
 
+        return createWithStatus(id, taskType, maxAttempts, JobStatus.PENDING, now);
+    }
+
+    public static Job createBlocked(JobId id, String taskType, int maxAttempts, Instant now) {
+        if (maxAttempts < 1) {
+            throw new IllegalArgumentException("maxAttempts must be at least 1");
+        }
+
+        return createWithStatus(id, taskType, maxAttempts, JobStatus.BLOCKED, now);
+    }
+
+    private static Job createWithStatus(
+        JobId id,
+        String taskType,
+        int maxAttempts,
+        JobStatus status,
+        Instant now
+    ) {
         return new Job(
             id,
             taskType,
-            JobStatus.PENDING,
+            status,
             0,
             maxAttempts,
             0,
@@ -114,6 +132,20 @@ public final class Job {
             leaseExpiresAt,
             null,
             null,
+            now
+        );
+    }
+
+    public Job markDependenciesReady(Instant now) {
+        Objects.requireNonNull(now, "now is required");
+        return copy(
+            JobStateMachine.transition(status, JobEvent.DEPENDENCIES_READY),
+            attemptCount,
+            assignmentVersion,
+            null,
+            null,
+            now,
+            failureReason,
             now
         );
     }
