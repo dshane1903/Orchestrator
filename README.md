@@ -37,3 +37,21 @@ mvn test
 ```
 
 Repository integration tests use Testcontainers and require Docker Desktop or another compatible Docker daemon.
+
+### API Preview
+
+Submit a job:
+
+```bash
+curl -X POST http://localhost:8080/api/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{"taskType":"embedding-generation","maxAttempts":3}'
+```
+
+Claim the next runnable job for a worker:
+
+```bash
+curl -X POST http://localhost:8080/api/jobs/claim \
+  -H 'Content-Type: application/json' \
+  -d '{"workerId":"worker-1","leaseSeconds":30}'
+```
