@@ -15,6 +15,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class JdbcJobRepository {
@@ -82,6 +83,56 @@ public class JdbcJobRepository {
                     WHERE id = :id
                     """,
                 Map.of("id", id.value()),
+                this::mapJob
+            ));
+        } catch (EmptyResultDataAccessException exception) {
+            return Optional.empty();
+        }
+    }
+
+    @Transactional
+    public Optional<Job> claimNextRunnable(WorkerId workerId, Instant now, Instant leaseExpiresAt) {
+        try {
+            return Optional.ofNullable(jdbcTemplate.queryForObject(
+                """
+                    UPDATE jobs
+                    SET
+                        status = 'RUNNING',
+                        attempt_count = attempt_count + 1,
+                        assignment_version = assignment_version + 1,
+                        leased_by = :workerId,
+                        lease_expires_at = :leaseExpiresAt,
+                        next_run_at = NULL,
+                        failure_reason = NULL,
+                        updated_at = :now
+                    WHERE id = (
+                        SELECT id
+                        FROM jobs
+                        WHERE status IN ('PENDING', 'RETRYING')
+                          AND next_run_at <= :now
+                          AND attempt_count < max_attempts
+                        ORDER BY next_run_at ASC, created_at ASC
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT 1
+                    )
+                    RETURNING
+                        id,
+                        task_type,
+                        status,
+                        attempt_count,
+                        max_attempts,
+                        assignment_version,
+                        leased_by,
+                        lease_expires_at,
+                        next_run_at,
+                        failure_reason,
+                        created_at,
+                        updated_at
+                    """,
+                new MapSqlParameterSource()
+                    .addValue("workerId", workerId.value())
+                    .addValue("now", timestamp(now))
+                    .addValue("leaseExpiresAt", timestamp(leaseExpiresAt)),
                 this::mapJob
             ));
         } catch (EmptyResultDataAccessException exception) {
@@ -159,4 +210,3 @@ public class JdbcJobRepository {
         return instant == null ? null : Timestamp.from(instant);
     }
 }
-

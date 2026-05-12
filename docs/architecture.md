@@ -35,6 +35,7 @@ stateDiagram-v2
 ## Reliability Rules
 
 - A worker owns a job only until `lease_expires_at`.
+- Runnable jobs are claimed with a single database update using row locks, so competing schedulers cannot assign the same job.
 - Completion reports must include the assignment version that granted the lease.
 - Stale workers cannot complete work after a newer assignment version exists.
 - Claiming a job increments its assignment version, which acts as the first fencing token.
