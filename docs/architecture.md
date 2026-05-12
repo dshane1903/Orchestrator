@@ -16,6 +16,22 @@ Jobs begin in `PENDING`, move to `RUNNING` when leased by a worker, and finish a
 
 Retries are represented explicitly: a failed attempt can schedule the job back to `RETRYING` with a future `next_run_at`. When that time arrives, the scheduler can move it back to `PENDING`.
 
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> RUNNING: CLAIM
+    PENDING --> CANCELLED: CANCEL
+    RUNNING --> SUCCEEDED: COMPLETE
+    RUNNING --> RETRYING: FAIL_RETRYABLE
+    RUNNING --> FAILED: FAIL_PERMANENT
+    RUNNING --> PENDING: LEASE_EXPIRED
+    RUNNING --> CANCELLED: CANCEL
+    RETRYING --> RUNNING: CLAIM
+    RETRYING --> DEAD_LETTERED: MARK_DEAD_LETTERED
+    RETRYING --> CANCELLED: CANCEL
+    FAILED --> DEAD_LETTERED: MARK_DEAD_LETTERED
+```
+
 ## Reliability Rules
 
 - A worker owns a job only until `lease_expires_at`.
@@ -33,4 +49,3 @@ The orchestrator itself is general-purpose. The demos will focus on infrastructu
 - batch inference over an input manifest
 - model evaluation over a fixed dataset
 - index rebuild and merge
-
