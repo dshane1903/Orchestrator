@@ -52,10 +52,28 @@ public final class Job {
             throw new IllegalArgumentException("maxAttempts must be at least 1");
         }
 
+        return createWithStatus(id, taskType, maxAttempts, JobStatus.PENDING, now);
+    }
+
+    public static Job createBlocked(JobId id, String taskType, int maxAttempts, Instant now) {
+        if (maxAttempts < 1) {
+            throw new IllegalArgumentException("maxAttempts must be at least 1");
+        }
+
+        return createWithStatus(id, taskType, maxAttempts, JobStatus.BLOCKED, now);
+    }
+
+    private static Job createWithStatus(
+        JobId id,
+        String taskType,
+        int maxAttempts,
+        JobStatus status,
+        Instant now
+    ) {
         return new Job(
             id,
             taskType,
-            JobStatus.PENDING,
+            status,
             0,
             maxAttempts,
             0,
@@ -65,6 +83,36 @@ public final class Job {
             null,
             now,
             now
+        );
+    }
+
+    public static Job restore(
+        JobId id,
+        String taskType,
+        JobStatus status,
+        int attemptCount,
+        int maxAttempts,
+        long assignmentVersion,
+        WorkerId leasedBy,
+        Instant leaseExpiresAt,
+        Instant nextRunAt,
+        String failureReason,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+        return new Job(
+            id,
+            taskType,
+            status,
+            attemptCount,
+            maxAttempts,
+            assignmentVersion,
+            leasedBy,
+            leaseExpiresAt,
+            nextRunAt,
+            failureReason,
+            createdAt,
+            updatedAt
         );
     }
 
@@ -88,6 +136,50 @@ public final class Job {
         );
     }
 
+    public Job markDependenciesReady(Instant now) {
+        Objects.requireNonNull(now, "now is required");
+        return copy(
+            JobStateMachine.transition(status, JobEvent.DEPENDENCIES_READY),
+            attemptCount,
+            assignmentVersion,
+            null,
+            null,
+            now,
+            failureReason,
+            now
+        );
+    }
+
+    public Job renewLease(
+        WorkerId workerId,
+        long observedAssignmentVersion,
+        Instant leaseExpiresAt,
+        Instant now
+    ) {
+        requireCurrentAssignment(workerId, observedAssignmentVersion);
+        Objects.requireNonNull(leaseExpiresAt, "leaseExpiresAt is required");
+        Objects.requireNonNull(now, "now is required");
+        if (!leaseExpiresAt.isAfter(now)) {
+            throw new IllegalArgumentException("leaseExpiresAt must be in the future");
+        }
+
+        return copy(
+            JobStateMachine.transition(status, JobEvent.RENEW_LEASE),
+            attemptCount,
+            assignmentVersion,
+            workerId,
+            leaseExpiresAt,
+            null,
+            failureReason,
+            now
+        );
+    }
+
+    public Job complete(WorkerId workerId, long observedAssignmentVersion, Instant now) {
+        requireCurrentAssignment(workerId, observedAssignmentVersion);
+        return complete(observedAssignmentVersion, now);
+    }
+
     public Job complete(long observedAssignmentVersion, Instant now) {
         requireFreshAssignment(observedAssignmentVersion);
         return copy(
@@ -100,6 +192,17 @@ public final class Job {
             null,
             now
         );
+    }
+
+    public Job failForRetry(
+        WorkerId workerId,
+        long observedAssignmentVersion,
+        String reason,
+        Instant nextRunAt,
+        Instant now
+    ) {
+        requireCurrentAssignment(workerId, observedAssignmentVersion);
+        return failForRetry(observedAssignmentVersion, reason, nextRunAt, now);
     }
 
     public Job failForRetry(long observedAssignmentVersion, String reason, Instant nextRunAt, Instant now) {
@@ -116,6 +219,11 @@ public final class Job {
             requireText(reason, "reason is required"),
             now
         );
+    }
+
+    public Job failPermanently(WorkerId workerId, long observedAssignmentVersion, String reason, Instant now) {
+        requireCurrentAssignment(workerId, observedAssignmentVersion);
+        return failPermanently(observedAssignmentVersion, reason, now);
     }
 
     public Job failPermanently(long observedAssignmentVersion, String reason, Instant now) {
@@ -150,7 +258,7 @@ public final class Job {
         return copy(
             JobStateMachine.transition(status, JobEvent.LEASE_EXPIRED),
             attemptCount,
-            assignmentVersion,
+            assignmentVersion + 1,
             null,
             null,
             now,
@@ -226,6 +334,15 @@ public final class Job {
         }
     }
 
+    private void requireCurrentAssignment(WorkerId workerId, long observedAssignmentVersion) {
+        Objects.requireNonNull(workerId, "workerId is required");
+        requireFreshAssignment(observedAssignmentVersion);
+        if (!workerId.equals(leasedBy)) {
+            WorkerId currentWorkerId = leasedBy == null ? new WorkerId("<unassigned>") : leasedBy;
+            throw new JobAssignmentOwnershipException(id, workerId, currentWorkerId);
+        }
+    }
+
     private Job copy(
         JobStatus newStatus,
         int newAttemptCount,
@@ -259,4 +376,3 @@ public final class Job {
         return value;
     }
 }
-

@@ -26,11 +26,16 @@ public final class JobStateMachine {
     private static Map<JobStatus, Map<JobEvent, JobStatus>> buildTransitions() {
         EnumMap<JobStatus, Map<JobEvent, JobStatus>> transitions = new EnumMap<>(JobStatus.class);
 
+        transitions.put(JobStatus.BLOCKED, Map.of(
+            JobEvent.DEPENDENCIES_READY, JobStatus.PENDING,
+            JobEvent.CANCEL, JobStatus.CANCELLED
+        ));
         transitions.put(JobStatus.PENDING, Map.of(
             JobEvent.CLAIM, JobStatus.RUNNING,
             JobEvent.CANCEL, JobStatus.CANCELLED
         ));
         transitions.put(JobStatus.RUNNING, Map.of(
+            JobEvent.RENEW_LEASE, JobStatus.RUNNING,
             JobEvent.COMPLETE, JobStatus.SUCCEEDED,
             JobEvent.FAIL_RETRYABLE, JobStatus.RETRYING,
             JobEvent.FAIL_PERMANENT, JobStatus.FAILED,
@@ -53,4 +58,3 @@ public final class JobStateMachine {
         return Map.copyOf(transitions);
     }
 }
-

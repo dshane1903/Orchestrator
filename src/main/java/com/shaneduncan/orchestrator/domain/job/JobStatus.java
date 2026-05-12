@@ -1,6 +1,7 @@
 package com.shaneduncan.orchestrator.domain.job;
 
 public enum JobStatus {
+    BLOCKED(false),
     PENDING(false),
     RUNNING(false),
     RETRYING(false),
@@ -19,4 +20,3 @@ public enum JobStatus {
         return terminal;
     }
 }
-

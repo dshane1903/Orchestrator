@@ -25,6 +25,24 @@ class JobTest {
     }
 
     @Test
+    void createsBlockedJobForDependentWorkflowNode() {
+        Job job = Job.createBlocked(JOB_ID, "embedding-generation", 3, NOW);
+
+        assertThat(job.status()).isEqualTo(JobStatus.BLOCKED);
+        assertThat(job.nextRunAt()).contains(NOW);
+    }
+
+    @Test
+    void blockedJobBecomesPendingWhenDependenciesAreReady() {
+        Job blocked = Job.createBlocked(JOB_ID, "embedding-generation", 3, NOW);
+
+        Job pending = blocked.markDependenciesReady(NOW.plusSeconds(10));
+
+        assertThat(pending.status()).isEqualTo(JobStatus.PENDING);
+        assertThat(pending.nextRunAt()).contains(NOW.plusSeconds(10));
+    }
+
+    @Test
     void claimAssignsLeaseAndFencingVersion() {
         Job claimed = Job.create(JOB_ID, "embedding-generation", 3, NOW)
             .claim(WORKER_ONE, NOW.plusSeconds(30), NOW);
@@ -41,11 +59,44 @@ class JobTest {
         Job claimed = Job.create(JOB_ID, "embedding-generation", 3, NOW)
             .claim(WORKER_ONE, NOW.plusSeconds(30), NOW);
 
-        Job completed = claimed.complete(claimed.assignmentVersion(), NOW.plusSeconds(3));
+        Job completed = claimed.complete(WORKER_ONE, claimed.assignmentVersion(), NOW.plusSeconds(3));
 
         assertThat(completed.status()).isEqualTo(JobStatus.SUCCEEDED);
         assertThat(completed.leasedBy()).isEmpty();
         assertThat(completed.leaseExpiresAt()).isEmpty();
+    }
+
+    @Test
+    void renewalExtendsLeaseWithoutChangingAssignmentVersion() {
+        Job claimed = Job.create(JOB_ID, "embedding-generation", 3, NOW)
+            .claim(WORKER_ONE, NOW.plusSeconds(30), NOW);
+
+        Job renewed = claimed.renewLease(
+            WORKER_ONE,
+            claimed.assignmentVersion(),
+            NOW.plusSeconds(90),
+            NOW.plusSeconds(20)
+        );
+
+        assertThat(renewed.status()).isEqualTo(JobStatus.RUNNING);
+        assertThat(renewed.assignmentVersion()).isEqualTo(claimed.assignmentVersion());
+        assertThat(renewed.leasedBy()).contains(WORKER_ONE);
+        assertThat(renewed.leaseExpiresAt()).contains(NOW.plusSeconds(90));
+    }
+
+    @Test
+    void renewalRequiresOwningWorker() {
+        Job claimed = Job.create(JOB_ID, "embedding-generation", 3, NOW)
+            .claim(WORKER_ONE, NOW.plusSeconds(30), NOW);
+
+        assertThatThrownBy(() -> claimed.renewLease(
+                WORKER_TWO,
+                claimed.assignmentVersion(),
+                NOW.plusSeconds(90),
+                NOW.plusSeconds(20)
+            ))
+            .isInstanceOf(JobAssignmentOwnershipException.class)
+            .hasMessageContaining("does not own job");
     }
 
     @Test
@@ -60,7 +111,22 @@ class JobTest {
         assertThatThrownBy(() -> secondAssignment.complete(firstAssignment.assignmentVersion(), NOW.plusSeconds(45)))
             .isInstanceOf(StaleJobAssignmentException.class)
             .hasMessageContaining("observed version 1")
-            .hasMessageContaining("current version is 2");
+            .hasMessageContaining("current version is 3");
+    }
+
+    @Test
+    void leaseExpiryFencesCurrentAssignmentBeforeReclaim() {
+        Job claimed = Job.create(JOB_ID, "embedding-generation", 3, NOW)
+            .claim(WORKER_ONE, NOW.plusSeconds(30), NOW);
+
+        Job recovered = claimed.expireLease(NOW.plusSeconds(31));
+
+        assertThat(recovered.status()).isEqualTo(JobStatus.PENDING);
+        assertThat(recovered.assignmentVersion()).isEqualTo(2);
+        assertThat(recovered.leasedBy()).isEmpty();
+        assertThat(recovered.leaseExpiresAt()).isEmpty();
+        assertThatThrownBy(() -> recovered.complete(claimed.assignmentVersion(), NOW.plusSeconds(32)))
+            .isInstanceOf(StaleJobAssignmentException.class);
     }
 
     @Test
@@ -90,4 +156,3 @@ class JobTest {
             .hasMessageContaining("leaseExpiresAt");
     }
 }
-

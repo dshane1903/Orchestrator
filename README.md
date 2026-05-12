@@ -1,6 +1,6 @@
-# Orchestrator
+# Forgeflow
 
-Orchestrator is a distributed workflow and job orchestration system for long-running backend and ML infrastructure workloads.
+Forgeflow is a durable workflow orchestration engine for long-running backend and ML infrastructure workloads.
 
 The project is intentionally infrastructure-first: users submit workflows, workers claim tasks with leases, failed work is retried with backoff, abandoned work is reassigned after lease expiry, and operators can inspect system health through APIs and metrics.
 
@@ -28,3 +28,76 @@ The project is intentionally infrastructure-first: users submit workflows, worke
 
 This repository starts small on purpose. Each distributed-systems feature should land as a focused change with tests or a runnable demonstration.
 
+### Test Suite
+
+Run the full suite with:
+
+```bash
+mvn test
+```
+
+Repository integration tests use Testcontainers and require Docker Desktop or another compatible Docker daemon.
+
+### API Preview
+
+Submit a job:
+
+```bash
+curl -X POST http://localhost:8080/api/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{"taskType":"embedding-generation","maxAttempts":3}'
+```
+
+Submit a workflow DAG:
+
+```bash
+curl -X POST http://localhost:8080/api/workflows \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name":"document-indexing",
+    "nodes":[
+      {"key":"ingest","taskType":"document-ingestion","maxAttempts":3,"dependsOn":[]},
+      {"key":"embed","taskType":"embedding-generation","maxAttempts":3,"dependsOn":["ingest"]}
+    ]
+  }'
+```
+
+Claim the next runnable job for a worker:
+
+```bash
+curl -X POST http://localhost:8080/api/jobs/claim \
+  -H 'Content-Type: application/json' \
+  -d '{"workerId":"worker-1","leaseSeconds":30}'
+```
+
+Long-poll for work from the worker API:
+
+```bash
+curl -X POST http://localhost:8080/api/workers/worker-1/poll \
+  -H 'Content-Type: application/json' \
+  -d '{"leaseSeconds":30,"waitSeconds":10}'
+```
+
+Renew the lease before it expires:
+
+```bash
+curl -X POST http://localhost:8080/api/workers/worker-1/jobs/<job-id>/renew-lease \
+  -H 'Content-Type: application/json' \
+  -d '{"assignmentVersion":1,"leaseSeconds":30}'
+```
+
+Complete a job with its fencing token:
+
+```bash
+curl -X POST http://localhost:8080/api/workers/worker-1/jobs/<job-id>/complete \
+  -H 'Content-Type: application/json' \
+  -d '{"assignmentVersion":1}'
+```
+
+Scrape Prometheus metrics:
+
+```bash
+curl http://localhost:8080/actuator/prometheus
+```
+
+Key Forgeflow metrics include claim count, lease recovery runs, expired lease count, and queue depth by job status.
