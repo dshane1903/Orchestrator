@@ -1,6 +1,6 @@
 # Architecture
 
-Orchestrator is a durable execution engine built around explicit state transitions rather than best-effort queue consumption.
+Forgeflow is a durable execution engine built around explicit state transitions rather than best-effort queue consumption.
 
 ## Core Components
 
@@ -43,7 +43,7 @@ stateDiagram-v2
 
 ## ML Demo Workloads
 
-The orchestrator itself is general-purpose. The demos will focus on infrastructure-shaped ML jobs:
+Forgeflow itself is general-purpose. The demos will focus on infrastructure-shaped ML jobs:
 
 - batch document ingestion
 - embedding generation over document chunks

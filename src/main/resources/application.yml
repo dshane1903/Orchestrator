@@ -1,6 +1,6 @@
-orchestrator:
+forgeflow:
   application:
-    name: orchestrator
+    name: forgeflow
     version: 0.1.0-SNAPSHOT
 
 management:
@@ -15,4 +15,3 @@ management:
 
 server:
   port: 8080
-

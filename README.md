@@ -1,6 +1,6 @@
-# Orchestrator
+# Forgeflow
 
-Orchestrator is a distributed workflow and job orchestration system for long-running backend and ML infrastructure workloads.
+Forgeflow is a durable workflow orchestration engine for long-running backend and ML infrastructure workloads.
 
 The project is intentionally infrastructure-first: users submit workflows, workers claim tasks with leases, failed work is retried with backoff, abandoned work is reassigned after lease expiry, and operators can inspect system health through APIs and metrics.
 
@@ -27,4 +27,3 @@ The project is intentionally infrastructure-first: users submit workflows, worke
 ## Development
 
 This repository starts small on purpose. Each distributed-systems feature should land as a focused change with tests or a runnable demonstration.
-

@@ -22,9 +22,8 @@ class SystemControllerTest {
     void returnsSystemInformation() throws Exception {
         mockMvc.perform(get("/api/system"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value("orchestrator"))
+            .andExpect(jsonPath("$.name").value("forgeflow"))
             .andExpect(jsonPath("$.version").value("0.1.0-SNAPSHOT"))
             .andExpect(jsonPath("$.serverTime", notNullValue()));
     }
 }
-
