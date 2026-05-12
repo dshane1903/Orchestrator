@@ -133,6 +133,32 @@ class JdbcJobRepositoryTest {
     }
 
     @Test
+    void sqlClaimMatchesDomainClaimTransition() {
+        Instant now = Instant.parse("2026-05-13T04:30:00Z");
+        WorkerId workerId = new WorkerId("worker-claim-parity");
+        Job pending = Job.create(
+            new JobId(UUID.fromString("e23e4567-e89b-12d3-a456-426614174000")),
+            "embedding-generation",
+            3,
+            now.minusSeconds(30)
+        );
+        Instant leaseExpiresAt = now.plusSeconds(45);
+        Job expected = pending.claim(workerId, leaseExpiresAt, now);
+        repository.insert(pending);
+
+        Job claimed = repository.claimNextRunnable(workerId, now, leaseExpiresAt).orElseThrow();
+
+        assertThat(claimed.status()).isEqualTo(expected.status());
+        assertThat(claimed.attemptCount()).isEqualTo(expected.attemptCount());
+        assertThat(claimed.assignmentVersion()).isEqualTo(expected.assignmentVersion());
+        assertThat(claimed.leasedBy()).isEqualTo(expected.leasedBy());
+        assertThat(claimed.leaseExpiresAt()).isEqualTo(expected.leaseExpiresAt());
+        assertThat(claimed.nextRunAt()).isEqualTo(expected.nextRunAt());
+        assertThat(claimed.failureReason()).isEqualTo(expected.failureReason());
+        assertThat(claimed.updatedAt()).isEqualTo(expected.updatedAt());
+    }
+
+    @Test
     void doesNotClaimFutureRetry() {
         Instant now = Instant.parse("2026-05-12T21:00:00Z");
         Job retrying = Job.create(

@@ -91,11 +91,27 @@ public class JdbcJobRepository {
         }
     }
 
+    public long countByStatus(JobStatus status) {
+        Long count = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM jobs
+                WHERE status = :status
+                """,
+            Map.of("status", status.name()),
+            Long.class
+        );
+        return count == null ? 0 : count;
+    }
+
     @Transactional
     public Optional<Job> claimNextRunnable(WorkerId workerId, Instant now, Instant leaseExpiresAt) {
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(
                 """
+                    -- This duplicates Job.claim() deliberately so claiming stays a single
+                    -- atomic UPDATE ... RETURNING statement with row locks. Keep the
+                    -- repository invariant test aligned with the domain transition.
                     UPDATE jobs
                     SET
                         status = 'RUNNING',

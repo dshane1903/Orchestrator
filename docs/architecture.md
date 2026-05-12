@@ -52,6 +52,15 @@ stateDiagram-v2
 - Client idempotency keys map duplicate submissions to the original job.
 - State transitions are validated in the domain layer before persistence.
 
+## Observability
+
+Forgeflow exposes Micrometer metrics through Spring Actuator and Prometheus:
+
+- `forgeflow.jobs.claimed`: successful job claims.
+- `forgeflow.leases.recovery.runs`: lease recovery sweeps that recovered at least one expired lease.
+- `forgeflow.leases.expired`: expired leases recovered back to runnable state.
+- `forgeflow.jobs.queue.depth{status=...}`: current job count by status.
+
 ## ML Demo Workloads
 
 Forgeflow itself is general-purpose. The demos will focus on infrastructure-shaped ML jobs:

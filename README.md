@@ -93,3 +93,11 @@ curl -X POST http://localhost:8080/api/workers/worker-1/jobs/<job-id>/complete \
   -H 'Content-Type: application/json' \
   -d '{"assignmentVersion":1}'
 ```
+
+Scrape Prometheus metrics:
+
+```bash
+curl http://localhost:8080/actuator/prometheus
+```
+
+Key Forgeflow metrics include claim count, lease recovery runs, expired lease count, and queue depth by job status.

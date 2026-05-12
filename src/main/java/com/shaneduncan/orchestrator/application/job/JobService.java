@@ -4,6 +4,7 @@ import com.shaneduncan.orchestrator.domain.job.Job;
 import com.shaneduncan.orchestrator.domain.job.JobId;
 import com.shaneduncan.orchestrator.domain.job.StaleJobAssignmentException;
 import com.shaneduncan.orchestrator.domain.job.WorkerId;
+import com.shaneduncan.orchestrator.observability.JobMetrics;
 import com.shaneduncan.orchestrator.persistence.job.JdbcJobRepository;
 import com.shaneduncan.orchestrator.persistence.workflow.JdbcWorkflowRepository;
 import java.time.Clock;
@@ -20,15 +21,18 @@ public class JobService {
 
     private final JdbcJobRepository jobRepository;
     private final JdbcWorkflowRepository workflowRepository;
+    private final JobMetrics jobMetrics;
     private final Clock clock;
 
     public JobService(
         JdbcJobRepository jobRepository,
         JdbcWorkflowRepository workflowRepository,
+        JobMetrics jobMetrics,
         Clock clock
     ) {
         this.jobRepository = jobRepository;
         this.workflowRepository = workflowRepository;
+        this.jobMetrics = jobMetrics;
         this.clock = clock;
     }
 
@@ -46,11 +50,13 @@ public class JobService {
         requirePositive(leaseDuration, "leaseDuration");
 
         Instant now = Instant.now(clock);
-        return jobRepository.claimNextRunnable(
+        Optional<Job> claimedJob = jobRepository.claimNextRunnable(
             new WorkerId(workerId),
             now,
             now.plus(leaseDuration)
         );
+        claimedJob.ifPresent(jobMetrics::recordClaim);
+        return claimedJob;
     }
 
     public Job renewLease(JobId id, String workerId, long assignmentVersion, Duration leaseDuration) {
@@ -104,7 +110,9 @@ public class JobService {
     }
 
     public List<Job> recoverExpiredLeases(int batchSize) {
-        return jobRepository.recoverExpiredLeases(Instant.now(clock), batchSize);
+        List<Job> recoveredJobs = jobRepository.recoverExpiredLeases(Instant.now(clock), batchSize);
+        jobMetrics.recordRecoveredExpiredLeases(recoveredJobs.size());
+        return recoveredJobs;
     }
 
     private Job findExisting(JobId id) {
