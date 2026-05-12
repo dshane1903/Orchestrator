@@ -180,7 +180,7 @@ public final class Job {
         return copy(
             JobStateMachine.transition(status, JobEvent.LEASE_EXPIRED),
             attemptCount,
-            assignmentVersion,
+            assignmentVersion + 1,
             null,
             null,
             now,

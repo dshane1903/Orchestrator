@@ -60,7 +60,22 @@ class JobTest {
         assertThatThrownBy(() -> secondAssignment.complete(firstAssignment.assignmentVersion(), NOW.plusSeconds(45)))
             .isInstanceOf(StaleJobAssignmentException.class)
             .hasMessageContaining("observed version 1")
-            .hasMessageContaining("current version is 2");
+            .hasMessageContaining("current version is 3");
+    }
+
+    @Test
+    void leaseExpiryFencesCurrentAssignmentBeforeReclaim() {
+        Job claimed = Job.create(JOB_ID, "embedding-generation", 3, NOW)
+            .claim(WORKER_ONE, NOW.plusSeconds(30), NOW);
+
+        Job recovered = claimed.expireLease(NOW.plusSeconds(31));
+
+        assertThat(recovered.status()).isEqualTo(JobStatus.PENDING);
+        assertThat(recovered.assignmentVersion()).isEqualTo(2);
+        assertThat(recovered.leasedBy()).isEmpty();
+        assertThat(recovered.leaseExpiresAt()).isEmpty();
+        assertThatThrownBy(() -> recovered.complete(claimed.assignmentVersion(), NOW.plusSeconds(32)))
+            .isInstanceOf(StaleJobAssignmentException.class);
     }
 
     @Test
@@ -90,4 +105,3 @@ class JobTest {
             .hasMessageContaining("leaseExpiresAt");
     }
 }
-

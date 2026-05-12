@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -138,6 +139,52 @@ public class JdbcJobRepository {
         } catch (EmptyResultDataAccessException exception) {
             return Optional.empty();
         }
+    }
+
+    @Transactional
+    public List<Job> recoverExpiredLeases(Instant now, int limit) {
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit must be at least 1");
+        }
+
+        return jdbcTemplate.query(
+            """
+                UPDATE jobs
+                SET
+                    status = 'PENDING',
+                    assignment_version = assignment_version + 1,
+                    leased_by = NULL,
+                    lease_expires_at = NULL,
+                    next_run_at = :now,
+                    updated_at = :now
+                WHERE id IN (
+                    SELECT id
+                    FROM jobs
+                    WHERE status = 'RUNNING'
+                      AND lease_expires_at <= :now
+                    ORDER BY lease_expires_at ASC, updated_at ASC
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT :limit
+                )
+                RETURNING
+                    id,
+                    task_type,
+                    status,
+                    attempt_count,
+                    max_attempts,
+                    assignment_version,
+                    leased_by,
+                    lease_expires_at,
+                    next_run_at,
+                    failure_reason,
+                    created_at,
+                    updated_at
+                """,
+            new MapSqlParameterSource()
+                .addValue("now", timestamp(now))
+                .addValue("limit", limit),
+            this::mapJob
+        );
     }
 
     public boolean updateIfAssignmentVersionMatches(Job job, long expectedAssignmentVersion) {

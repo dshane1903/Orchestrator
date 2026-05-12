@@ -7,6 +7,7 @@ import com.shaneduncan.orchestrator.domain.job.JobId;
 import com.shaneduncan.orchestrator.domain.job.JobStatus;
 import com.shaneduncan.orchestrator.domain.job.WorkerId;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -190,5 +191,120 @@ class JdbcJobRepositoryTest {
         assertThat(secondClaim).isEmpty();
         assertThat(repository.findById(job.id()))
             .hasValueSatisfying(loaded -> assertThat(loaded.leasedBy()).contains(new WorkerId("worker-1")));
+    }
+
+    @Test
+    void recoversExpiredRunningLeases() {
+        Instant now = Instant.parse("2026-05-13T00:00:00Z");
+        Job expired = Job.create(
+                new JobId(UUID.fromString("823e4567-e89b-12d3-a456-426614174000")),
+                "embedding-generation",
+                3,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-1"), now.minusSeconds(1), now.minusSeconds(30));
+        Job active = Job.create(
+                new JobId(UUID.fromString("923e4567-e89b-12d3-a456-426614174000")),
+                "batch-inference",
+                3,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-2"), now.plusSeconds(60), now.minusSeconds(30));
+        repository.insert(expired);
+        repository.insert(active);
+
+        List<Job> recovered = repository.recoverExpiredLeases(now, 10);
+
+        assertThat(recovered)
+            .singleElement()
+            .satisfies(job -> {
+                assertThat(job.id()).isEqualTo(expired.id());
+                assertThat(job.status()).isEqualTo(JobStatus.PENDING);
+                assertThat(job.assignmentVersion()).isEqualTo(2);
+                assertThat(job.leasedBy()).isEmpty();
+                assertThat(job.leaseExpiresAt()).isEmpty();
+                assertThat(job.nextRunAt()).contains(now);
+            });
+        assertThat(repository.findById(active.id()))
+            .hasValueSatisfying(job -> {
+                assertThat(job.status()).isEqualTo(JobStatus.RUNNING);
+                assertThat(job.leasedBy()).contains(new WorkerId("worker-2"));
+            });
+    }
+
+    @Test
+    void recoveredJobCanBeClaimedWithNewFencingVersion() {
+        Instant now = Instant.parse("2026-05-13T01:00:00Z");
+        Job expired = Job.create(
+                new JobId(UUID.fromString("a23e4567-e89b-12d3-a456-426614174000")),
+                "embedding-generation",
+                3,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-1"), now.minusSeconds(1), now.minusSeconds(30));
+        repository.insert(expired);
+
+        repository.recoverExpiredLeases(now, 10);
+        Optional<Job> reclaimed = repository.claimNextRunnable(
+            new WorkerId("worker-2"),
+            now.plusSeconds(1),
+            now.plusSeconds(31)
+        );
+
+        assertThat(reclaimed)
+            .hasValueSatisfying(job -> {
+                assertThat(job.status()).isEqualTo(JobStatus.RUNNING);
+                assertThat(job.attemptCount()).isEqualTo(2);
+                assertThat(job.assignmentVersion()).isEqualTo(3);
+                assertThat(job.leasedBy()).contains(new WorkerId("worker-2"));
+            });
+    }
+
+    @Test
+    void recoveryFencesLateCompletionFromExpiredWorker() {
+        Instant now = Instant.parse("2026-05-13T02:00:00Z");
+        Job expired = Job.create(
+                new JobId(UUID.fromString("b23e4567-e89b-12d3-a456-426614174000")),
+                "embedding-generation",
+                3,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-1"), now.minusSeconds(1), now.minusSeconds(30));
+        repository.insert(expired);
+
+        repository.recoverExpiredLeases(now, 10);
+        Job lateCompletion = expired.complete(expired.assignmentVersion(), now.plusSeconds(1));
+
+        assertThat(repository.updateIfAssignmentVersionMatches(lateCompletion, expired.assignmentVersion()))
+            .isFalse();
+        assertThat(repository.findById(expired.id()))
+            .hasValueSatisfying(job -> {
+                assertThat(job.status()).isEqualTo(JobStatus.PENDING);
+                assertThat(job.assignmentVersion()).isEqualTo(2);
+            });
+    }
+
+    @Test
+    void limitsExpiredLeaseRecoveryBatchSize() {
+        Instant now = Instant.parse("2026-05-13T03:00:00Z");
+        Job first = Job.create(
+                new JobId(UUID.fromString("c23e4567-e89b-12d3-a456-426614174000")),
+                "embedding-generation",
+                3,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-1"), now.minusSeconds(10), now.minusSeconds(30));
+        Job second = Job.create(
+                new JobId(UUID.fromString("d23e4567-e89b-12d3-a456-426614174000")),
+                "batch-inference",
+                3,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-2"), now.minusSeconds(5), now.minusSeconds(30));
+        repository.insert(first);
+        repository.insert(second);
+
+        assertThat(repository.recoverExpiredLeases(now, 1)).hasSize(1);
+        assertThat(repository.recoverExpiredLeases(now, 10)).hasSize(1);
     }
 }
