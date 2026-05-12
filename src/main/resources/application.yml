@@ -3,6 +3,14 @@ forgeflow:
     name: forgeflow
     version: 0.1.0-SNAPSHOT
 
+spring:
+  datasource:
+    url: ${FORGEFLOW_DATABASE_URL:jdbc:postgresql://localhost:5432/forgeflow}
+    username: ${FORGEFLOW_DATABASE_USERNAME:forgeflow}
+    password: ${FORGEFLOW_DATABASE_PASSWORD:forgeflow}
+  flyway:
+    enabled: true
+
 management:
   endpoints:
     web:

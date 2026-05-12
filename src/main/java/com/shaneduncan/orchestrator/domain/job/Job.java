@@ -68,6 +68,36 @@ public final class Job {
         );
     }
 
+    public static Job restore(
+        JobId id,
+        String taskType,
+        JobStatus status,
+        int attemptCount,
+        int maxAttempts,
+        long assignmentVersion,
+        WorkerId leasedBy,
+        Instant leaseExpiresAt,
+        Instant nextRunAt,
+        String failureReason,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+        return new Job(
+            id,
+            taskType,
+            status,
+            attemptCount,
+            maxAttempts,
+            assignmentVersion,
+            leasedBy,
+            leaseExpiresAt,
+            nextRunAt,
+            failureReason,
+            createdAt,
+            updatedAt
+        );
+    }
+
     public Job claim(WorkerId workerId, Instant leaseExpiresAt, Instant now) {
         Objects.requireNonNull(workerId, "workerId is required");
         Objects.requireNonNull(leaseExpiresAt, "leaseExpiresAt is required");
@@ -259,4 +289,3 @@ public final class Job {
         return value;
     }
 }
-

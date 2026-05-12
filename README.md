@@ -27,3 +27,13 @@ The project is intentionally infrastructure-first: users submit workflows, worke
 ## Development
 
 This repository starts small on purpose. Each distributed-systems feature should land as a focused change with tests or a runnable demonstration.
+
+### Test Suite
+
+Run the full suite with:
+
+```bash
+mvn test
+```
+
+Repository integration tests use Testcontainers and require Docker Desktop or another compatible Docker daemon.
