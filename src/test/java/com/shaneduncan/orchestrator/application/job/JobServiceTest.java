@@ -51,6 +51,21 @@ class JobServiceTest {
     }
 
     @Test
+    void movesFailedJobsToDeadLetterUsingCurrentClockTime() {
+        JobService jobService = new JobService(
+            jobRepository,
+            workflowRepository,
+            jobMetrics,
+            Clock.fixed(NOW, ZoneOffset.UTC)
+        );
+        when(jobRepository.moveFailedJobsToDeadLetter(NOW, 25)).thenReturn(List.of());
+
+        jobService.moveFailedJobsToDeadLetter(25);
+
+        verify(jobRepository).moveFailedJobsToDeadLetter(NOW, 25);
+    }
+
+    @Test
     void recordsMetricWhenJobIsClaimed() {
         JobService jobService = new JobService(
             jobRepository,
@@ -74,5 +89,28 @@ class JobServiceTest {
         jobService.claimNextRunnable("worker-1", Duration.ofSeconds(30));
 
         verify(jobMetrics).recordClaim(claimedJob);
+    }
+
+    @Test
+    void recordsMetricWhenFailedJobsAreDeadLettered() {
+        JobService jobService = new JobService(
+            jobRepository,
+            workflowRepository,
+            jobMetrics,
+            Clock.fixed(NOW, ZoneOffset.UTC)
+        );
+        Job failedJob = Job.create(
+                new JobId(UUID.fromString("0a3e4567-e89b-12d3-a456-426614174000")),
+                "embedding-generation",
+                1,
+                NOW
+            )
+            .claim(new WorkerId("worker-1"), NOW.plusSeconds(30), NOW)
+            .failPermanently(new WorkerId("worker-1"), 1, "model server unavailable", NOW.plusSeconds(1));
+        when(jobRepository.moveFailedJobsToDeadLetter(NOW, 10)).thenReturn(List.of(failedJob.markDeadLettered(NOW)));
+
+        jobService.moveFailedJobsToDeadLetter(10);
+
+        verify(jobMetrics).recordDeadLetteredJobs(1);
     }
 }

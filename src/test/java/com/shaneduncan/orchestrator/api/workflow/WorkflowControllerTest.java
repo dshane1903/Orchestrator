@@ -53,6 +53,7 @@ class WorkflowControllerTest {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("forgeflow.scheduler.lease-recovery.enabled", () -> false);
+        registry.add("forgeflow.scheduler.dead-letter.enabled", () -> false);
     }
 
     @BeforeEach
@@ -77,6 +78,25 @@ class WorkflowControllerTest {
             .andExpect(jsonPath("$.jobs[0].job.status").value(JobStatus.PENDING.name()))
             .andExpect(jsonPath("$.jobs[1].nodeKey").value("embed"))
             .andExpect(jsonPath("$.jobs[1].job.status").value(JobStatus.BLOCKED.name()));
+    }
+
+    @Test
+    void duplicateIdempotencyKeyReturnsOriginalWorkflow() throws Exception {
+        MvcResult firstResult = createWorkflow("workflow-submit-123");
+        JsonNode firstWorkflow = objectMapper.readTree(firstResult.getResponse().getContentAsString());
+
+        mockMvc.perform(post("/api/workflows")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(workflowRequest("workflow-submit-123")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(firstWorkflow.get("id").asText()))
+            .andExpect(jsonPath("$.jobs[0].nodeKey").value("ingest"))
+            .andExpect(jsonPath("$.jobs[1].nodeKey").value("embed"));
+
+        Long workflowCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM workflows", Map.of(), Long.class);
+        Long jobCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM jobs", Map.of(), Long.class);
+        org.assertj.core.api.Assertions.assertThat(workflowCount).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(jobCount).isEqualTo(2);
     }
 
     @Test
@@ -135,33 +155,47 @@ class WorkflowControllerTest {
     }
 
     private MvcResult createWorkflow() throws Exception {
+        return createWorkflow(null);
+    }
+
+    private MvcResult createWorkflow(String idempotencyKey) throws Exception {
         return mockMvc.perform(post("/api/workflows")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                      "name": "document-indexing",
-                      "nodes": [
-                        {
-                          "key": "ingest",
-                          "taskType": "document-ingestion",
-                          "maxAttempts": 3,
-                          "dependsOn": []
-                        },
-                        {
-                          "key": "embed",
-                          "taskType": "embedding-generation",
-                          "maxAttempts": 3,
-                          "dependsOn": ["ingest"]
-                        }
-                      ]
-                    }
-                    """))
+                .content(workflowRequest(idempotencyKey)))
             .andExpect(status().isCreated())
             .andExpect(header().string("Location", notNullValue()))
             .andExpect(jsonPath("$.status").value(WorkflowStatus.RUNNING.name()))
             .andExpect(jsonPath("$.jobs[0].job.status").value(JobStatus.PENDING.name()))
             .andExpect(jsonPath("$.jobs[1].job.status").value(JobStatus.BLOCKED.name()))
             .andReturn();
+    }
+
+    private String workflowRequest(String idempotencyKey) {
+        String idempotencyField = idempotencyKey == null
+            ? ""
+            : """
+              "idempotencyKey": "%s",
+              """.formatted(idempotencyKey);
+        return """
+            {
+              "name": "document-indexing",
+              %s
+              "nodes": [
+                {
+                  "key": "ingest",
+                  "taskType": "document-ingestion",
+                  "maxAttempts": 3,
+                  "dependsOn": []
+                },
+                {
+                  "key": "embed",
+                  "taskType": "embedding-generation",
+                  "maxAttempts": 3,
+                  "dependsOn": ["ingest"]
+                }
+              ]
+            }
+            """.formatted(idempotencyField);
     }
 
     private JsonNode pollJob(String workerId) throws Exception {

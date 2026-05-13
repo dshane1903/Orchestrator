@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public record CreateJobRequest(
     @NotBlank String taskType,
-    @Min(1) @Max(100) int maxAttempts
+    @Min(1) @Max(100) int maxAttempts,
+    String idempotencyKey
 ) {
 }
-

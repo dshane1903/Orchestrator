@@ -28,6 +28,27 @@ The project is intentionally infrastructure-first: users submit workflows, worke
 
 This repository starts small on purpose. Each distributed-systems feature should land as a focused change with tests or a runnable demonstration.
 
+### Local Stack
+
+Start the full demo stack with:
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- Forgeflow API: `http://localhost:8080`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` with `admin` / `admin`
+- Postgres: `localhost:55432`
+
+Grafana provisions the Forgeflow overview dashboard automatically. Stop the stack with:
+
+```bash
+docker compose down
+```
+
 ### Test Suite
 
 Run the full suite with:
@@ -45,7 +66,7 @@ Submit a job:
 ```bash
 curl -X POST http://localhost:8080/api/jobs \
   -H 'Content-Type: application/json' \
-  -d '{"taskType":"embedding-generation","maxAttempts":3}'
+  -d '{"taskType":"embedding-generation","maxAttempts":3,"idempotencyKey":"embed-docs-001"}'
 ```
 
 Submit a workflow DAG:
@@ -58,7 +79,8 @@ curl -X POST http://localhost:8080/api/workflows \
     "nodes":[
       {"key":"ingest","taskType":"document-ingestion","maxAttempts":3,"dependsOn":[]},
       {"key":"embed","taskType":"embedding-generation","maxAttempts":3,"dependsOn":["ingest"]}
-    ]
+    ],
+    "idempotencyKey":"index-run-001"
   }'
 ```
 
@@ -94,10 +116,28 @@ curl -X POST http://localhost:8080/api/workers/worker-1/jobs/<job-id>/complete \
   -d '{"assignmentVersion":1}'
 ```
 
+Run a demo worker:
+
+```bash
+python3 tools/demo_worker.py --worker-id demo-worker-1 --max-jobs 5
+```
+
+Inject retryable failures from the demo worker:
+
+```bash
+python3 tools/demo_worker.py --worker-id flaky-worker-1 --failure-rate 0.25
+```
+
+Run the k6 submission/claim load test:
+
+```bash
+k6 run load/k6/jobs.js
+```
+
 Scrape Prometheus metrics:
 
 ```bash
 curl http://localhost:8080/actuator/prometheus
 ```
 
-Key Forgeflow metrics include claim count, lease recovery runs, expired lease count, and queue depth by job status.
+Key Forgeflow metrics include claim count, dead-letter count, lease recovery runs, expired lease count, and queue depth by job status.

@@ -37,7 +37,8 @@ public class WorkflowController {
                     node.maxAttempts(),
                     node.dependsOn()
                 ))
-                .toList()
+                .toList(),
+            request.idempotencyKey()
         ));
 
         return ResponseEntity

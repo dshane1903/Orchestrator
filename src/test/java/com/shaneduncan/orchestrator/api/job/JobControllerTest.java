@@ -52,6 +52,7 @@ class JobControllerTest {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("forgeflow.scheduler.lease-recovery.enabled", () -> false);
+        registry.add("forgeflow.scheduler.dead-letter.enabled", () -> false);
     }
 
     @BeforeEach
@@ -84,6 +85,38 @@ class JobControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(created.get("id").asText()))
             .andExpect(jsonPath("$.status").value(JobStatus.PENDING.name()));
+    }
+
+    @Test
+    void duplicateIdempotencyKeyReturnsOriginalJob() throws Exception {
+        MvcResult firstResult = mockMvc.perform(post("/api/jobs")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "taskType": "embedding-generation",
+                      "maxAttempts": 3,
+                      "idempotencyKey": "job-submit-123"
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andReturn();
+        JsonNode firstJob = objectMapper.readTree(firstResult.getResponse().getContentAsString());
+
+        mockMvc.perform(post("/api/jobs")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "taskType": "embedding-generation",
+                      "maxAttempts": 3,
+                      "idempotencyKey": "job-submit-123"
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(firstJob.get("id").asText()))
+            .andExpect(jsonPath("$.taskType").value("embedding-generation"));
+
+        Long jobCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM jobs", Map.of(), Long.class);
+        org.assertj.core.api.Assertions.assertThat(jobCount).isEqualTo(1);
     }
 
     @Test

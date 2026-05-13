@@ -33,12 +33,17 @@ public class JdbcWorkflowRepository {
     }
 
     public void insertWorkflow(Workflow workflow) {
+        insertWorkflow(workflow, null);
+    }
+
+    public void insertWorkflow(Workflow workflow, String idempotencyKey) {
         jdbcTemplate.update(
             """
                 INSERT INTO workflows (
                     id,
                     name,
                     status,
+                    idempotency_key,
                     created_at,
                     updated_at
                 )
@@ -46,6 +51,7 @@ public class JdbcWorkflowRepository {
                     :id,
                     :name,
                     :status,
+                    :idempotencyKey,
                     :createdAt,
                     :updatedAt
                 )
@@ -54,6 +60,7 @@ public class JdbcWorkflowRepository {
                 .addValue("id", workflow.id().value())
                 .addValue("name", workflow.name())
                 .addValue("status", workflow.status().name())
+                .addValue("idempotencyKey", idempotencyKey)
                 .addValue("createdAt", timestamp(workflow.createdAt()))
                 .addValue("updatedAt", timestamp(workflow.updatedAt()))
         );
@@ -118,6 +125,28 @@ public class JdbcWorkflowRepository {
                 this::mapWorkflow
             );
             return Optional.of(new WorkflowDetails(workflow, findJobs(workflowId)));
+        } catch (EmptyResultDataAccessException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public Optional<WorkflowDetails> findDetailsByIdempotencyKey(String idempotencyKey) {
+        try {
+            Workflow workflow = jdbcTemplate.queryForObject(
+                """
+                    SELECT
+                        id,
+                        name,
+                        status,
+                        created_at,
+                        updated_at
+                    FROM workflows
+                    WHERE idempotency_key = :idempotencyKey
+                    """,
+                Map.of("idempotencyKey", idempotencyKey),
+                this::mapWorkflow
+            );
+            return Optional.of(new WorkflowDetails(workflow, findJobs(workflow.id())));
         } catch (EmptyResultDataAccessException exception) {
             return Optional.empty();
         }
