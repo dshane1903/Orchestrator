@@ -44,6 +44,7 @@ class JdbcJobRepositoryTest {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("forgeflow.scheduler.lease-recovery.enabled", () -> false);
+        registry.add("forgeflow.scheduler.dead-letter.enabled", () -> false);
     }
 
     @BeforeEach
@@ -333,5 +334,66 @@ class JdbcJobRepositoryTest {
 
         assertThat(repository.recoverExpiredLeases(now, 1)).hasSize(1);
         assertThat(repository.recoverExpiredLeases(now, 10)).hasSize(1);
+    }
+
+    @Test
+    void movesFailedJobsToDeadLetter() {
+        Instant now = Instant.parse("2026-05-13T05:00:00Z");
+        Job failed = Job.create(
+                new JobId(UUID.fromString("f33e4567-e89b-12d3-a456-426614174000")),
+                "embedding-generation",
+                1,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-1"), now.minusSeconds(30), now.minusSeconds(45))
+            .failPermanently(new WorkerId("worker-1"), 1, "exhausted retries", now.minusSeconds(20));
+        Job pending = Job.create(
+            new JobId(UUID.fromString("f43e4567-e89b-12d3-a456-426614174000")),
+            "batch-inference",
+            3,
+            now.minusSeconds(60)
+        );
+        repository.insert(failed);
+        repository.insert(pending);
+
+        List<Job> deadLettered = repository.moveFailedJobsToDeadLetter(now, 10);
+
+        assertThat(deadLettered)
+            .singleElement()
+            .satisfies(job -> {
+                assertThat(job.id()).isEqualTo(failed.id());
+                assertThat(job.status()).isEqualTo(JobStatus.DEAD_LETTERED);
+                assertThat(job.assignmentVersion()).isEqualTo(failed.assignmentVersion());
+                assertThat(job.failureReason()).contains("exhausted retries");
+                assertThat(job.updatedAt()).isEqualTo(now);
+            });
+        assertThat(repository.findById(pending.id()))
+            .hasValueSatisfying(job -> assertThat(job.status()).isEqualTo(JobStatus.PENDING));
+    }
+
+    @Test
+    void limitsDeadLetterBatchSize() {
+        Instant now = Instant.parse("2026-05-13T06:00:00Z");
+        Job first = Job.create(
+                new JobId(UUID.fromString("f53e4567-e89b-12d3-a456-426614174000")),
+                "embedding-generation",
+                1,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-1"), now.minusSeconds(30), now.minusSeconds(45))
+            .failPermanently(new WorkerId("worker-1"), 1, "exhausted retries", now.minusSeconds(20));
+        Job second = Job.create(
+                new JobId(UUID.fromString("f63e4567-e89b-12d3-a456-426614174000")),
+                "batch-inference",
+                1,
+                now.minusSeconds(60)
+            )
+            .claim(new WorkerId("worker-2"), now.minusSeconds(30), now.minusSeconds(45))
+            .failPermanently(new WorkerId("worker-2"), 1, "invalid payload", now.minusSeconds(10));
+        repository.insert(first);
+        repository.insert(second);
+
+        assertThat(repository.moveFailedJobsToDeadLetter(now, 1)).hasSize(1);
+        assertThat(repository.moveFailedJobsToDeadLetter(now.plusSeconds(1), 10)).hasSize(1);
     }
 }

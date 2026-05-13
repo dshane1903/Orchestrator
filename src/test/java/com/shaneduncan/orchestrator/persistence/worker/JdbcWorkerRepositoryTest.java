@@ -46,6 +46,7 @@ class JdbcWorkerRepositoryTest {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("forgeflow.scheduler.lease-recovery.enabled", () -> false);
+        registry.add("forgeflow.scheduler.dead-letter.enabled", () -> false);
     }
 
     @BeforeEach

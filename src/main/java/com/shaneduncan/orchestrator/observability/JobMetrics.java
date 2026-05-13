@@ -12,12 +12,16 @@ import org.springframework.stereotype.Component;
 public class JobMetrics {
 
     private final Counter claimedJobs;
+    private final Counter deadLetteredJobs;
     private final Counter leaseRecoveryRuns;
     private final Counter expiredLeases;
 
     public JobMetrics(MeterRegistry meterRegistry, JdbcJobRepository jobRepository) {
         this.claimedJobs = Counter.builder("forgeflow.jobs.claimed")
             .description("Total jobs successfully claimed by workers")
+            .register(meterRegistry);
+        this.deadLetteredJobs = Counter.builder("forgeflow.jobs.dead.lettered")
+            .description("Total jobs moved to the dead-letter queue")
             .register(meterRegistry);
         this.leaseRecoveryRuns = Counter.builder("forgeflow.leases.recovery.runs")
             .description("Total lease recovery sweeps that recovered at least one job")
@@ -48,5 +52,12 @@ public class JobMetrics {
         }
         leaseRecoveryRuns.increment();
         expiredLeases.increment(recoveredCount);
+    }
+
+    public void recordDeadLetteredJobs(int deadLetteredCount) {
+        if (deadLetteredCount < 1) {
+            return;
+        }
+        deadLetteredJobs.increment(deadLetteredCount);
     }
 }

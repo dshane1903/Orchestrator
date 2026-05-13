@@ -237,6 +237,50 @@ public class JdbcJobRepository {
         );
     }
 
+    @Transactional
+    public List<Job> moveFailedJobsToDeadLetter(Instant now, int limit) {
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit must be at least 1");
+        }
+
+        return jdbcTemplate.query(
+            """
+                UPDATE jobs
+                SET
+                    status = 'DEAD_LETTERED',
+                    leased_by = NULL,
+                    lease_expires_at = NULL,
+                    next_run_at = NULL,
+                    updated_at = :now
+                WHERE id IN (
+                    SELECT id
+                    FROM jobs
+                    WHERE status = 'FAILED'
+                    ORDER BY updated_at ASC, created_at ASC
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT :limit
+                )
+                RETURNING
+                    id,
+                    task_type,
+                    status,
+                    attempt_count,
+                    max_attempts,
+                    assignment_version,
+                    leased_by,
+                    lease_expires_at,
+                    next_run_at,
+                    failure_reason,
+                    created_at,
+                    updated_at
+                """,
+            new MapSqlParameterSource()
+                .addValue("now", timestamp(now))
+                .addValue("limit", limit),
+            this::mapJob
+        );
+    }
+
     public boolean updateIfAssignmentVersionMatches(Job job, long expectedAssignmentVersion) {
         int updatedRows = jdbcTemplate.update(
             """

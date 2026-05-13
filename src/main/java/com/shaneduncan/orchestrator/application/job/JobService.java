@@ -127,6 +127,12 @@ public class JobService {
         return recoveredJobs;
     }
 
+    public List<Job> moveFailedJobsToDeadLetter(int batchSize) {
+        List<Job> deadLetteredJobs = jobRepository.moveFailedJobsToDeadLetter(Instant.now(clock), batchSize);
+        jobMetrics.recordDeadLetteredJobs(deadLetteredJobs.size());
+        return deadLetteredJobs;
+    }
+
     private Job findExisting(JobId id) {
         return jobRepository.findById(id)
             .orElseThrow(() -> new NoSuchElementException("Job not found: " + id.value()));

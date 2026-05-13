@@ -8,6 +8,11 @@ forgeflow:
       initial-delay-ms: 5000
       fixed-delay-ms: 5000
       batch-size: 100
+    dead-letter:
+      enabled: true
+      initial-delay-ms: 7000
+      fixed-delay-ms: 5000
+      batch-size: 100
 
 spring:
   datasource:
