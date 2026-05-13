@@ -10,6 +10,7 @@ Forgeflow is a durable execution engine built around explicit state transitions 
 - State store: persists workflows, jobs, attempts, leases, idempotency keys, and worker heartbeats.
 - Observability: exposes metrics for queue depth, job latency, retry counts, lease expiry, and worker liveness.
 - Lease recovery loop: periodically requeues expired `RUNNING` jobs and fences stale workers.
+- Dead-letter loop: periodically moves terminal `FAILED` jobs into `DEAD_LETTERED` so operators have an explicit quarantine queue.
 
 ## First State Model
 
@@ -46,6 +47,7 @@ stateDiagram-v2
 - Workflow submissions reject duplicate node keys, missing dependencies, and cycles before writing jobs.
 - Lease renewal keeps long-running work alive without changing the assignment version.
 - Expired leases are recovered in bounded batches and increment assignment versions before requeueing work.
+- Failed jobs are moved to `DEAD_LETTERED` in bounded batches, preserving the failure reason for inspection.
 - Completion, failure, and renewal reports must include the assignment version that granted the lease.
 - Stale workers cannot complete work after a newer assignment version exists.
 - Claiming a job increments its assignment version, which acts as the first fencing token.
@@ -57,6 +59,7 @@ stateDiagram-v2
 Forgeflow exposes Micrometer metrics through Spring Actuator and Prometheus:
 
 - `forgeflow.jobs.claimed`: successful job claims.
+- `forgeflow.jobs.dead.lettered`: jobs moved to the dead-letter queue.
 - `forgeflow.leases.recovery.runs`: lease recovery sweeps that recovered at least one expired lease.
 - `forgeflow.leases.expired`: expired leases recovered back to runnable state.
 - `forgeflow.jobs.queue.depth{status=...}`: current job count by status.
