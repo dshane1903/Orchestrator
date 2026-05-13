@@ -49,7 +49,7 @@ stateDiagram-v2
 - Completion, failure, and renewal reports must include the assignment version that granted the lease.
 - Stale workers cannot complete work after a newer assignment version exists.
 - Claiming a job increments its assignment version, which acts as the first fencing token.
-- Client idempotency keys map duplicate submissions to the original job.
+- Client idempotency keys map duplicate job and workflow submissions to the original resource.
 - State transitions are validated in the domain layer before persistence.
 
 ## Observability

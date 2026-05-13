@@ -37,8 +37,20 @@ public class JobService {
     }
 
     public Job createJob(String taskType, int maxAttempts) {
+        return createJob(taskType, maxAttempts, null);
+    }
+
+    public Job createJob(String taskType, int maxAttempts, String idempotencyKey) {
+        Optional<String> normalizedIdempotencyKey = normalize(idempotencyKey);
+        if (normalizedIdempotencyKey.isPresent()) {
+            Optional<Job> existingJob = jobRepository.findByIdempotencyKey(normalizedIdempotencyKey.get());
+            if (existingJob.isPresent()) {
+                return existingJob.get();
+            }
+        }
+
         Job job = Job.create(JobId.newId(), taskType, maxAttempts, Instant.now(clock));
-        jobRepository.insert(job);
+        jobRepository.insert(job, normalizedIdempotencyKey.orElse(null));
         return job;
     }
 
@@ -135,5 +147,12 @@ public class JobService {
         if (duration.isZero() || duration.isNegative()) {
             throw new IllegalArgumentException(fieldName + " must be positive");
         }
+    }
+
+    private Optional<String> normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(value.trim());
     }
 }

@@ -87,6 +87,38 @@ class JobControllerTest {
     }
 
     @Test
+    void duplicateIdempotencyKeyReturnsOriginalJob() throws Exception {
+        MvcResult firstResult = mockMvc.perform(post("/api/jobs")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "taskType": "embedding-generation",
+                      "maxAttempts": 3,
+                      "idempotencyKey": "job-submit-123"
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andReturn();
+        JsonNode firstJob = objectMapper.readTree(firstResult.getResponse().getContentAsString());
+
+        mockMvc.perform(post("/api/jobs")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "taskType": "embedding-generation",
+                      "maxAttempts": 3,
+                      "idempotencyKey": "job-submit-123"
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(firstJob.get("id").asText()))
+            .andExpect(jsonPath("$.taskType").value("embedding-generation"));
+
+        Long jobCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM jobs", Map.of(), Long.class);
+        org.assertj.core.api.Assertions.assertThat(jobCount).isEqualTo(1);
+    }
+
+    @Test
     void returnsNotFoundForUnknownJob() throws Exception {
         mockMvc.perform(get("/api/jobs/{id}", "123e4567-e89b-12d3-a456-426614174000"))
             .andExpect(status().isNotFound());

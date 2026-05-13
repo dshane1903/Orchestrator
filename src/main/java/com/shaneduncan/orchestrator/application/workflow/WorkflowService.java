@@ -39,14 +39,27 @@ public class WorkflowService {
 
     @Transactional
     public WorkflowDetails createWorkflow(String name, List<WorkflowNode> nodes) {
+        return createWorkflow(name, nodes, null);
+    }
+
+    @Transactional
+    public WorkflowDetails createWorkflow(String name, List<WorkflowNode> nodes, String idempotencyKey) {
         validateNodes(nodes);
+        Optional<String> normalizedIdempotencyKey = normalize(idempotencyKey);
+        if (normalizedIdempotencyKey.isPresent()) {
+            Optional<WorkflowDetails> existingWorkflow =
+                workflowRepository.findDetailsByIdempotencyKey(normalizedIdempotencyKey.get());
+            if (existingWorkflow.isPresent()) {
+                return existingWorkflow.get();
+            }
+        }
 
         Instant now = Instant.now(clock);
         Workflow workflow = Workflow.create(WorkflowId.newId(), name, now);
         Map<String, Job> jobsByNodeKey = new HashMap<>();
         List<WorkflowJobDetails> jobs = new ArrayList<>();
 
-        workflowRepository.insertWorkflow(workflow);
+        workflowRepository.insertWorkflow(workflow, normalizedIdempotencyKey.orElse(null));
         for (WorkflowNode node : nodes) {
             JobId jobId = JobId.newId();
             Job job = node.dependsOn().isEmpty()
@@ -133,5 +146,12 @@ public class WorkflowService {
 
         visiting.remove(nodeKey);
         visited.add(nodeKey);
+    }
+
+    private Optional<String> normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(value.trim());
     }
 }

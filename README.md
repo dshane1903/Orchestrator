@@ -45,7 +45,7 @@ Submit a job:
 ```bash
 curl -X POST http://localhost:8080/api/jobs \
   -H 'Content-Type: application/json' \
-  -d '{"taskType":"embedding-generation","maxAttempts":3}'
+  -d '{"taskType":"embedding-generation","maxAttempts":3,"idempotencyKey":"embed-docs-001"}'
 ```
 
 Submit a workflow DAG:
@@ -58,7 +58,8 @@ curl -X POST http://localhost:8080/api/workflows \
     "nodes":[
       {"key":"ingest","taskType":"document-ingestion","maxAttempts":3,"dependsOn":[]},
       {"key":"embed","taskType":"embedding-generation","maxAttempts":3,"dependsOn":["ingest"]}
-    ]
+    ],
+    "idempotencyKey":"index-run-001"
   }'
 ```
 

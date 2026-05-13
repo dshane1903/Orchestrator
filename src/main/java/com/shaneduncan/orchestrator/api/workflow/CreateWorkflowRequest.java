@@ -7,6 +7,7 @@ import java.util.List;
 
 public record CreateWorkflowRequest(
     @NotBlank String name,
-    @NotEmpty List<@Valid WorkflowNodeRequest> nodes
+    @NotEmpty List<@Valid WorkflowNodeRequest> nodes,
+    String idempotencyKey
 ) {
 }

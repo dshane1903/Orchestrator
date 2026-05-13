@@ -26,7 +26,11 @@ public class JobController {
 
     @PostMapping
     public ResponseEntity<JobResponse> createJob(@Valid @RequestBody CreateJobRequest request) {
-        JobResponse response = JobResponse.from(jobService.createJob(request.taskType(), request.maxAttempts()));
+        JobResponse response = JobResponse.from(jobService.createJob(
+            request.taskType(),
+            request.maxAttempts(),
+            request.idempotencyKey()
+        ));
         return ResponseEntity
             .created(URI.create("/api/jobs/" + response.id()))
             .body(response);
@@ -48,4 +52,3 @@ public class JobController {
             .orElseGet(() -> ResponseEntity.noContent().build());
     }
 }
-

@@ -28,6 +28,10 @@ public class JdbcJobRepository {
     }
 
     public void insert(Job job) {
+        insert(job, null);
+    }
+
+    public void insert(Job job, String idempotencyKey) {
         jdbcTemplate.update(
             """
                 INSERT INTO jobs (
@@ -41,6 +45,7 @@ public class JdbcJobRepository {
                     lease_expires_at,
                     next_run_at,
                     failure_reason,
+                    idempotency_key,
                     created_at,
                     updated_at
                 )
@@ -55,11 +60,12 @@ public class JdbcJobRepository {
                     :leaseExpiresAt,
                     :nextRunAt,
                     :failureReason,
+                    :idempotencyKey,
                     :createdAt,
                     :updatedAt
                 )
                 """,
-            parameters(job)
+            parameters(job).addValue("idempotencyKey", idempotencyKey)
         );
     }
 
@@ -84,6 +90,34 @@ public class JdbcJobRepository {
                     WHERE id = :id
                     """,
                 Map.of("id", id.value()),
+                this::mapJob
+            ));
+        } catch (EmptyResultDataAccessException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public Optional<Job> findByIdempotencyKey(String idempotencyKey) {
+        try {
+            return Optional.ofNullable(jdbcTemplate.queryForObject(
+                """
+                    SELECT
+                        id,
+                        task_type,
+                        status,
+                        attempt_count,
+                        max_attempts,
+                        assignment_version,
+                        leased_by,
+                        lease_expires_at,
+                        next_run_at,
+                        failure_reason,
+                        created_at,
+                        updated_at
+                    FROM jobs
+                    WHERE idempotency_key = :idempotencyKey
+                    """,
+                Map.of("idempotencyKey", idempotencyKey),
                 this::mapJob
             ));
         } catch (EmptyResultDataAccessException exception) {
